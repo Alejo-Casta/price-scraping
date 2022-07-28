@@ -30,20 +30,21 @@ def get_links_df():
 def open_browser():
     df = get_links_df()
     with sync_playwright() as p:
-        browser = p.firefox.launch()
+        browser = p.firefox.launch_persistent_context(user_data_dir='./data/session.json')
         for i in df.index:
             link = df['Link'][i]
             if df['Shop'][i] in constant.STORES:
                 store = constant.STORES[df['Shop'][i]]
+                print(link)
                 page = browser.new_page()
                 page.goto(link)
                 page.wait_for_timeout(5000)
                 for selector in store['tag']:
                     price_html = page.query_selector(selector)
                     if price_html:
-                        pattern = re.compile('[^0-9.]')
-                        price = pattern.sub('', price_html.text_content())
+                        price = store['get_price'](re, price_html.text_content())
                         df.loc[i:i, 'Price'] = price
+                        print(price)
                         break
         print(df)
         browser.close()
