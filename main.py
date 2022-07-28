@@ -1,3 +1,5 @@
+import re
+
 import pygsheets
 from playwright.sync_api import sync_playwright
 
@@ -17,7 +19,11 @@ def get_links_df():
     # create the dataframe
     df = sheet.get_as_df()
     df['Price'] = 0
-
+    shops = []
+    for i in df.index:
+        final = df['Link'][i].find('/', 9)
+        shops.append(df['Link'][i][0:final])
+    df['Shop'] = shops
     return df
 
 
@@ -25,22 +31,21 @@ def open_browser():
     df = get_links_df()
     with sync_playwright() as p:
         browser = p.firefox.launch()
-        for data in df['ID']:
-            link = df['Link'][data - 1]
-            for store in constant.STORES:
-                if store['url'] in link:
-                    print(link)
-                    page = browser.new_page()
-                    page.goto(link)
-                    try:
-                        stock = False if page.wait_for_selector(store['price'],
-                                                                timeout=1000) is None else True
-                    except:
-                        stock = False
-                    if stock:
-                        content = store['function'](page, store['price'])
-                        print(content)
-                    page.close()
+        for i in df.index:
+            link = df['Link'][i]
+            if df['Shop'][i] in constant.STORES:
+                store = constant.STORES[df['Shop'][i]]
+                page = browser.new_page()
+                page.goto(link)
+                page.wait_for_timeout(5000)
+                for selector in store['tag']:
+                    price_html = page.query_selector(selector)
+                    if price_html:
+                        pattern = re.compile('[^0-9.]')
+                        price = pattern.sub('', price_html.text_content())
+                        df.loc[i:i, 'Price'] = price
+                        break
+        print(df)
         browser.close()
 
 
